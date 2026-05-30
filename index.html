@@ -55,14 +55,28 @@
         }
         #trailToggle { left: 10px; font-size: 11px; font-weight: 700; }
         #coverToggle { left: 48px; }
+        #cometStyleToggle { left: 86px; font-size: 11px; font-weight: 700; }
         #coverLabel {
             position: absolute;
             top: 14px;
-            left: 86px;
+            left: 124px;
             color: rgba(255,255,255,0.4);
             font: 400 11px sans-serif;
             z-index: 10;
             pointer-events: none;
+        }
+        /* Mode-A comet: solid 44px circle, no outer ring */
+        #comet.mode-a {
+            width: 44px;
+            height: 44px;
+        }
+        #comet.mode-a .ring-outer {
+            display: none;
+        }
+        #comet.mode-a .ring-inner {
+            left: 0; right: 0; top: 0; bottom: 0;
+            box-shadow: 0px 4px 4px rgba(0, 0, 0, 0.25);
+            transition: background 0.12s;
         }
         /* comet element */
         #comet {
@@ -118,6 +132,7 @@
         <button id="bgToggle" class="ctrl-btn">&#x25B6;</button>
         <button id="trailToggle" class="ctrl-btn">&#x2013;</button>
         <button id="coverToggle" class="ctrl-btn">&#x25C0;</button>
+        <button id="cometStyleToggle" class="ctrl-btn">A</button>
         <span id="coverLabel">1 / 5</span>
     </div>
     <script>
@@ -183,6 +198,7 @@
         let accentMode = false;
         let accentColor  = '#ffffff';
         let inverseColor = '#000000';
+        let altCometStyle = false; // false=B (default), true=A (solid, colored)
 
         // --- accent color extraction ---
         function _getLum(r, g, b) {
@@ -251,6 +267,13 @@
             burstToggleBtn.classList.toggle('on', burstMode);
         });
         let draggingComet = false;
+
+        const ringInner = cometEl.querySelector('.ring-inner');
+
+        function updateCometColor() {
+            if (!altCometStyle) { ringInner.style.background = ''; return; }
+            ringInner.style.background = draggingComet ? accentColor : inverseColor;
+        }
 
         function positionCometEl(x, y) {
             cometEl.style.left = x + 'px';
@@ -365,13 +388,15 @@
         function loadCover(index) {
             if (index === 0) {
                 drawCover(null);
-                if (accentMode) accentColor = computeAccentColor();
+                if (accentMode || altCometStyle) accentColor = computeAccentColor();
+                updateCometColor();
                 return;
             }
             const img = new Image();
             img.onload = () => {
                 drawCover(img);
-                if (accentMode) accentColor = computeAccentColor();
+                if (accentMode || altCometStyle) accentColor = computeAccentColor();
+                updateCometColor();
             };
             img.src = bgPaths[index];
         }
@@ -460,6 +485,18 @@
             trailToggleBtn.textContent = trailLabels[trailMode];
             trailToggleBtn.classList.toggle('on', trailMode > 0);
             if (trailMode === 2 || trailMode === 3) accentColor = computeAccentColor();
+            updateCometColor();
+        });
+
+        const cometStyleToggleBtn = document.getElementById('cometStyleToggle');
+        cometStyleToggleBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            altCometStyle = !altCometStyle;
+            cometStyleToggleBtn.classList.toggle('on', altCometStyle);
+            cometEl.classList.toggle('mode-a', altCometStyle);
+            // always compute accent so colors are ready
+            accentColor = computeAccentColor();
+            updateCometColor();
         });
 
         window.addEventListener('keydown', e => {
@@ -529,6 +566,7 @@
                 cometEl.classList.add('fading');
                 cometEl.classList.remove('held');
                 draggingComet = false;
+                updateCometColor();
             }
             setTimeout(resetState, 4000);
         }
@@ -550,6 +588,7 @@
                 if (dist < COMET_HIT) {
                     draggingComet = true;
                     cometEl.classList.add('held');
+                    updateCometColor();
                     poke(px, py);
                 }
                 // ignore taps elsewhere in comet mode
@@ -586,6 +625,7 @@
             if (cometMode && draggingComet && !unlocked) {
                 draggingComet = false;
                 cometEl.classList.remove('held');
+                updateCometColor();
                 // animate comet back to rest
                 cometX = COMET_REST_X;
                 cometY = COMET_REST_Y;
@@ -632,11 +672,13 @@
             ctx.drawImage(cover, 0, 0);
 
             // build masked reveal (wallpaper OR solid accent) through circle dots
-            const activeAccent = trailMode === 3 ? inverseColor : accentColor;
+            const revealFill    = trailMode === 3 ? inverseColor : accentColor;
+            // Mode-A comet: trail always uses inverse so it contrasts the accent comet
+            const trailDotColor = altCometStyle ? inverseColor : revealFill;
             if (hasReveal) {
                 maskedCtx.clearRect(0, 0, W, H);
                 if (accentMode && !unlocked) {
-                    maskedCtx.fillStyle = activeAccent;
+                    maskedCtx.fillStyle = revealFill;
                     maskedCtx.fillRect(0, 0, W, H);
                 } else {
                     maskedCtx.drawImage(homeBg, 0, 0);
@@ -661,12 +703,12 @@
                 trailCtx.clearRect(0, 0, W, H);
 
                 if (accentMode) {
-                    // solid accent colour dots, always visible regardless of circle radius
+                    // solid colour dots, always visible regardless of circle radius
                     for (const c of circles) {
                         if (c.trail > 0) {
                             const r = TRAIL_DOT * c.trail;
                             trailCtx.globalAlpha = c.trail * 0.9;
-                            trailCtx.fillStyle = activeAccent;
+                            trailCtx.fillStyle = trailDotColor;
                             trailCtx.beginPath();
                             trailCtx.arc(c.x, c.y, r, 0, Math.PI * 2);
                             trailCtx.fill();
